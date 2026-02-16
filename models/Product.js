@@ -18,6 +18,10 @@ const productSchema = new mongoose.Schema(
         stock: { type: Number, required: true, min: 0, default: 0 },
       },
     ],
+    tags: [{
+      type: String,
+      enum: ['Look bébé printemps', 'Look Femme Casual', 'Idées de cadeaux']
+    }],
   },
   { timestamps: true }
 )
