@@ -7,7 +7,7 @@ const Product = require('../models/Product')
 
 const CHARGILY_API_KEY = process.env.CHARGILY_APP_KEY
 const CHARGILY_APP_SECRET = process.env.CHARGILY_APP_SECRET
-const CHARGILY_BASE_URL = 'https://pay.chargily.net/api/v2'
+const CHARGILY_BASE_URL = 'https://pay.chargily.net/test/api/v2'
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000'
 
