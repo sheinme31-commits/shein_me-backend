@@ -58,11 +58,10 @@ router.post('/create', async (req, res) => {
     await order.save()
 
     // Créer le checkout Chargily Pay V2
+    // On envoie le montant total directement en DZD (amount + currency)
     const checkoutPayload = {
-      items: items.map((item) => ({
-        price: item.price,
-        quantity: item.quantity,
-      })),
+      amount: total,
+      currency: 'dzd',
       success_url: `${FRONTEND_URL}/confirmation?orderId=${order._id}`,
       failure_url: `${FRONTEND_URL}/confirmation?orderId=${order._id}&failed=1`,
       webhook_endpoint: `${BACKEND_URL}/api/payment/webhook`,
@@ -106,6 +105,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const signature = req.headers['signature']
     const body = req.body.toString()
 
+    // Vérifier la signature HMAC SHA256
     if (CHARGILY_APP_SECRET && signature) {
       const expectedSig = crypto
         .createHmac('sha256', CHARGILY_APP_SECRET)
@@ -114,30 +114,37 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
       if (signature !== expectedSig) {
         console.warn('Signature webhook invalide')
-        return res.status(401).json({ message: 'Signature invalide' })
+        return res.status(403).json({ message: 'Signature invalide' })
       }
     }
 
-    const payload = JSON.parse(body)
-    const { type, data } = payload
+    const event = JSON.parse(body)
+    const { type, data } = event
 
     if (type === 'checkout.paid') {
       const checkoutId = data?.id
       const metadata = data?.metadata
+
       let order = await Order.findOne({ chargilyInvoiceId: checkoutId })
       if (!order && metadata?.orderId) order = await Order.findById(metadata.orderId)
+
       if (order) {
         order.paymentStatus = 'payé'
         order.status = 'confirmé'
         await order.save()
+        console.log(`✅ Paiement confirmé pour commande ${order._id}`)
       }
+
     } else if (type === 'checkout.failed') {
       const checkoutId = data?.id
       const metadata = data?.metadata
+
       let order = await Order.findOne({ chargilyInvoiceId: checkoutId })
       if (!order && metadata?.orderId) order = await Order.findById(metadata.orderId)
-      if (order) {
+
+      if (order && order.paymentStatus !== 'échoué') {
         order.paymentStatus = 'échoué'
+        // Remettre le stock
         for (const item of order.items) {
           await Product.updateOne(
             { _id: item.product, 'sizes.size': item.size },
@@ -145,14 +152,16 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
           )
         }
         await order.save()
+        console.log(`❌ Paiement échoué pour commande ${order._id}`)
       }
     }
 
-    res.json({ message: 'Webhook traité' })
+    // Toujours répondre 200 à Chargily
+    res.status(200).json({ message: 'Webhook traité' })
 
   } catch (err) {
     console.error('Erreur webhook:', err.message)
-    res.status(500).json({ message: 'Erreur serveur webhook' })
+    res.status(200).json({ message: 'Reçu' }) // 200 même en cas d'erreur pour éviter les retries
   }
 })
 
